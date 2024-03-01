@@ -1,7 +1,7 @@
 {
   "name": "class-scrubber",
   "displayName": "Class Scrubber",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "A Visual Studio Code extension for finding and removing unused classes in your TypeScript codebase.",
   "publisher": "Bentoms",
   "icon": "images/classScrubberLogo.png",
