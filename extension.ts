@@ -2,10 +2,11 @@ import * as ts from 'typescript';
 import * as fs from 'fs';
 import * as vscode from 'vscode';
 
-
 class ClassScrubber {
   private program!: ts.Program;
   private _ignoreFiles: string[];
+
+  private statusBarItem: vscode.StatusBarItem;
 
   constructor(private workspaceRoot: string) {
     this._ignoreFiles = [];
@@ -18,6 +19,13 @@ class ClassScrubber {
       const sourceFiles = config.config.files;
       this.program = ts.createProgram(sourceFiles, {}, host);
     }
+
+    // Create status bar item
+    this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left);
+    this.statusBarItem.text = "ClassScrubber";
+    this.statusBarItem.command = "ClassScrubber.findUnusedClasses";
+    this.statusBarItem.tooltip = "Find Unused Classes";
+    this.statusBarItem.show();
   }
 
   public set ignoreFiles(value: string[]) {
@@ -82,14 +90,14 @@ function getDescendantsOfKind(node: ts.Node, kind: ts.SyntaxKind): ts.Node[] {
   return result;
 }
 
+let finder: ClassScrubber | undefined;
+
 export function activate(context: vscode.ExtensionContext) {
   const configuration = vscode.workspace.getConfiguration('ClassScrubber');
   const ignoreFiles = configuration.get('ignoreFiles', []);
 
-  let finder: ClassScrubber;
-
-  if (vscode.workspace) {
-    finder = new ClassScrubber(vscode.workspace.rootPath );
+  if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+    finder = new ClassScrubber(vscode.workspace.workspaceFolders[0].uri.fsPath);
     finder.ignoreFiles = ignoreFiles;
   }
 
@@ -97,7 +105,6 @@ export function activate(context: vscode.ExtensionContext) {
     if (finder) {
       const unusedClasses = finder.findUnusedClasses();
 
-      // Display the results in a new VS Code view
       const panel = vscode.window.createWebviewPanel(
         'ClassScrubber',
         'Unused Classes',
@@ -124,7 +131,6 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(disposable);
 
-  // Create a new command for removing unused classes
   context.subscriptions.push(vscode.commands.registerCommand('ClassScrubber.removeUnusedClasses', () => {
     if (finder) {
       finder.removeUnusedClasses();
@@ -134,7 +140,6 @@ export function activate(context: vscode.ExtensionContext) {
     }
   }));
 
-  // Create a new configuration file for the extension
   context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(event => {
     if (event.affectsConfiguration('ClassScrubber.ignoreFiles')) {
       const ignoreFiles = configuration.get('ignoreFiles', []);
@@ -143,10 +148,25 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }
   }));
+
+  // Create GUI for setting ignore files
+  let setIgnoreFilesDisposable = vscode.commands.registerCommand('ClassScrubber.setIgnoreFiles', async () => {
+    const ignoreFiles = await vscode.window.showInputBox({
+      placeHolder: 'Enter comma-separated file names to ignore (e.g., file1.ts, file2.ts)',
+      prompt: 'Enter file names to ignore (comma-separated)'
+    });
+
+    if (ignoreFiles !== undefined && finder) {
+      finder.ignoreFiles = ignoreFiles.split(',').map(file => file.trim());
+    }
+  });
+
+  context.subscriptions.push(setIgnoreFilesDisposable);
 }
 
-// Create a new command for removing unused classes
 export function deactivate(): void {
-  const configuration = vscode.workspace.getConfiguration('ClassScrubber');
-  configuration.update('ignoreFiles', [], vscode.ConfigurationTarget.Global);
+  if (finder) {
+    // Perform cleanup or additional deactivation logic here
+    finder = undefined;
+  }
 }
